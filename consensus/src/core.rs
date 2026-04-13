@@ -180,6 +180,7 @@ impl Core {
 
         // Reset the timer.
         self.timer.reset();
+        self.timer.start_round();
 
         // Broadcast the timeout message.
         debug!("Broadcasting {:?}", timeout);
@@ -272,6 +273,7 @@ impl Core {
         }
         // Reset the timer and advance round.
         self.timer.reset();
+        self.timer.start_round();
         self.round = round + 1;
         debug!("Moved to round {}", self.round);
 
@@ -302,6 +304,7 @@ impl Core {
     }
 
     async fn process_qc(&mut self, qc: &QC) {
+        self.timer.on_round_complete(); 
         self.advance_round(qc.round).await;
         self.update_high_qc(qc);
     }
@@ -413,6 +416,7 @@ impl Core {
         // Upon booting, generate the very first block (if we are the leader).
         // Also, schedule a timer in case we don't hear from the leader.
         self.timer.reset();
+        self.timer.start_round();
         if self.name == self.leader_elector.get_leader(self.round) {
             self.generate_proposal(None).await;
         }
