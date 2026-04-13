@@ -1,13 +1,13 @@
-# RTTstuff — Adaptive Timeouts for HotStuff BFT Consensus
+# RTTstuff: Adaptive Timeouts for HotStuff BFT Consensus
 
 [![build status](https://img.shields.io/github/actions/workflow/status/asonnino/hotstuff/rust.yml?style=flat-square&logo=GitHub&logoColor=white)](https://github.com/asonnino/hotstuff/actions)
 [![rustc](https://img.shields.io/badge/rustc-1.64+-blue?style=flat-square&logo=rust)](https://www.rust-lang.org)
 [![python](https://img.shields.io/badge/python-3.9-blue?style=flat-square&logo=python&logoColor=white)](https://www.python.org/downloads/release/python-390/)
 [![license](https://img.shields.io/badge/license-Apache-blue.svg?style=flat-square)](LICENSE)
 
-This repository extends the [2-chain HotStuff BFT consensus protocol](https://arxiv.org/abs/2106.10362) with **TCP-inspired adaptive round timeouts**, replacing the static timeout used in the original implementation. The core contribution is a Jacobson/Karels EWMA algorithm — the same technique that powers TCP retransmission timing — applied to consensus round duration estimation.
+This repository extends [Sonnino's HotStuff implementation](https://github.com/asonnino/hotstuff) with **TCP-inspired adaptive round timeouts**, replacing the static timeout used in the original. The core contribution is a Jacobson/Karels EWMA algorithm, the same technique that powers TCP retransmission timing, applied to consensus round duration estimation.
 
-The result: **96.7% success rate** and **681 ± 162 TPS** under variable-latency conditions, compared to **46.7% success** and **301 ± 308 TPS** with fixed timeouts. Failure detection is **64.5% faster** under realistic failure conditions.
+The result: **96.7% success rate** and **681 +/- 162 TPS** under variable-latency conditions, compared to **46.7% success** and **301 +/- 308 TPS** with fixed timeouts. Failure detection is **64.5% faster** under realistic failure conditions.
 
 ---
 
@@ -17,10 +17,10 @@ HotStuff consensus liveness depends critically on timeout calibration. A timeout
 
 **Fixed timeouts break in both directions:**
 
-- **Too short** → legitimate rounds get falsely timed out. Each false timeout triggers a view change, which itself consumes bandwidth and delays the next leader, who can also time out. The cascade compounds and the system can collapse entirely.
-- **Too long** → actual leader failures take forever to detect. Throughput stalls while nodes wait out the full timeout before recovery begins.
+- **Too short** -> legitimate rounds get falsely timed out. Each false timeout triggers a view change, which itself consumes bandwidth and delays the next leader, who can also time out. The cascade compounds and the system can collapse entirely.
+- **Too long** -> actual leader failures take forever to detect. Throughput stalls while nodes wait out the full timeout before recovery begins.
 
-In a network with variable latency — any realistic WAN deployment — there is no single fixed value that works well. This is the same problem TCP solved in 1988 with the Jacobson/Karels algorithm.
+In a network with variable latency (any realistic WAN deployment) there is no single fixed value that works well. This is the same problem TCP solved in 1988 with the Jacobson/Karels algorithm.
 
 ---
 
@@ -29,32 +29,32 @@ In a network with variable latency — any realistic WAN deployment — there is
 Each node independently estimates the current round-trip time using an exponential weighted moving average and sets its timeout as a function of both the estimate and its variance:
 
 ```
-EstimatedRTT = (1 - α) × EstimatedRTT + α × SampleRTT
-DevRTT       = (1 - β) × DevRTT       + β × |SampleRTT - EstimatedRTT|
-Timeout      = EstimatedRTT + 4 × DevRTT
+EstimatedRTT = (1 - a) * EstimatedRTT + a * SampleRTT
+DevRTT       = (1 - b) * DevRTT       + b * |SampleRTT - EstimatedRTT|
+Timeout      = EstimatedRTT + 4 * DevRTT
 ```
 
 ### Parameters
 
 | Parameter | Value | Rationale |
 |-----------|-------|-----------|
-| α | 0.125 | Converges in 5–10 rounds; smooth, non-oscillating |
-| β | 0.25 | Reacts faster to variance changes than the mean |
+| alpha | 0.125 | Converges in 5-10 rounds; smooth, non-oscillating |
+| beta | 0.25 | Reacts faster to variance changes than the mean |
 | Factor K | 4 | Covers 99.997% of legitimate rounds (only 3 per 100,000 exceed timeout) |
 | Min timeout | 1500 ms | Guards against underestimation during warm-up |
 | Max timeout | 30,000 ms | Caps recovery time in extreme conditions |
 
-**Why K=4?** Based on the standard normal distribution, a multiplier of K=1 allows 16% false timeouts, K=2 allows 2.3%, K=3 allows 0.13%, and K=4 reduces false timeouts to 0.003% — effectively eliminating false positives while keeping the timeout tight enough to detect real failures quickly.
+**Why K=4?** Based on the standard normal distribution, a multiplier of K=1 allows 16% false timeouts, K=2 allows 2.3%, K=3 allows 0.13%, and K=4 reduces false timeouts to 0.003%, effectively eliminating false positives while keeping the timeout tight enough to detect real failures quickly.
 
-**Why α=0.125?** A smaller α (e.g. 0.01) takes 50+ rounds to adapt and gets stuck on stale estimates. A larger α (e.g. 0.5) oscillates wildly on every measurement. At 0.125, the estimate adapts in 5–10 rounds and remains stable.
+**Why alpha=0.125?** A smaller alpha (e.g. 0.01) takes 50+ rounds to adapt and gets stuck on stale estimates. A larger alpha (e.g. 0.5) oscillates wildly on every measurement. At 0.125, the estimate adapts in 5-10 rounds and remains stable.
 
 ### How It Integrates
 
 The timer hooks into three points in the consensus protocol:
 
-- `start_round()` — called when a new round begins (on boot, on `advance_round`, on timeout)
-- `on_round_complete()` — called in `process_qc()` when a quorum certificate is formed, signalling that the round completed successfully. This is where the EWMA update happens.
-- `reset()` — arms the sleep timer for the current estimated timeout
+- `start_round()` -- called when a new round begins (on boot, on `advance_round`, on timeout)
+- `on_round_complete()` -- called in `process_qc()` when a quorum certificate is formed, signalling that the round completed successfully. This is where the EWMA update happens.
+- `reset()` -- arms the sleep timer for the current estimated timeout
 
 This means the timeout adapts continuously based on actual observed round durations, not a static guess.
 
@@ -78,23 +78,23 @@ To switch strategies, swap the `timer.rs` implementation with one of the alterna
 
 All experiments ran on 13-node committees. Network conditions were varied by injecting artificial per-message delay drawn uniformly from [0, 200ms] into the `SimpleSender`, simulating realistic WAN jitter.
 
-### Throughput & Stability (1,080 trials)
+### Throughput and Stability (1,080 trials)
 
-| Strategy | Success Rate | TPS (mean ± std) | Latency |
+| Strategy | Success Rate | TPS (mean +/- std) | Latency |
 |----------|-------------|-------------------|---------|
-| Fixed | 46.7% (14/30) | 301 ± 308 | High variance |
-| Exponential | 50.0% (15/30) | 350 ± 280 | Unstable |
-| **Adaptive** | **96.7% (29/30)** | **681 ± 162** | Stable |
+| Fixed | 46.7% (14/30) | 301 +/- 308 | High variance |
+| Exponential | 50.0% (15/30) | 350 +/- 280 | Unstable |
+| **Adaptive** | **96.7% (29/30)** | **681 +/- 162** | Stable |
 
 Statistical significance: **p < 0.001**
 
-### Failure Detection & Recovery
+### Failure Detection and Recovery
 
 Experiments injected controlled leader failures at known times and measured how long the remaining nodes took to detect the failure and resume committing blocks.
 
 | Scenario | Fixed Detection | Adaptive Detection | Improvement |
 |----------|----------------|-------------------|-------------|
-| Baseline (no failures) | 2843 ± 736 TPS | 2793 ± 795 TPS | No difference (p = 0.84) |
+| Baseline (no failures) | 2843 +/- 736 TPS | 2793 +/- 795 TPS | No difference (p = 0.84) |
 | Realistic (1 failure at 150s) | 6190 ms | 2198 ms | **64.5% faster** |
 | Stress (4 failures, 60s intervals) | 5240 ms | 2297 ms | **56.2% faster** |
 
@@ -102,7 +102,7 @@ The baseline result is important: adaptive timeouts impose **no overhead** under
 
 ### Why Adaptive Wins
 
-Under variable latency, the adaptive timer observes rounds completing in ~900–1200 ms and converges to a timeout of ~1800 ms. Legitimately slow rounds (1100 ms) still complete successfully because the timeout has headroom from the 4 × DevRTT term. Fixed timeouts set at 1000 ms misfire on those slow rounds, triggering the cascade failure described above.
+Under variable latency, the adaptive timer observes rounds completing in ~900-1200 ms and converges to a timeout of ~1800 ms. Legitimately slow rounds (1100 ms) still complete successfully because the timeout has headroom from the 4 * DevRTT term. Fixed timeouts set at 1000 ms misfire on those slow rounds, triggering the cascade failure described above.
 
 ---
 
@@ -110,15 +110,15 @@ Under variable latency, the adaptive timer observes rounds completing in ~900–
 
 A full experiment harness is included in `benchmark/`:
 
-- **`failure_injection.py`** — `NodeKiller` class: kills and restarts specific nodes by terminating their tmux sessions. Supports targeting by node ID or by round-robin leader slot.
-- **`failure_log_parser.py`** — `FailureLogParser`: parses node logs for `Timeout reached`, `Moved to round`, and `Committed B` events; computes detection latency, view-change duration, and total recovery time.
-- **`failure_experiment.py`** — `FailureExperiment`: orchestrates full experiment runs across three scenarios:
+- **`failure_injection.py`** -- `NodeKiller` class: kills and restarts specific nodes by terminating their tmux sessions. Supports targeting by node ID or by round-robin leader slot.
+- **`failure_log_parser.py`** -- `FailureLogParser`: parses node logs for `Timeout reached`, `Moved to round`, and `Committed B` events; computes detection latency, view-change duration, and total recovery time.
+- **`failure_experiment.py`** -- `FailureExperiment`: orchestrates full experiment runs across three scenarios:
   - **Baseline**: no failures
   - **Realistic**: single leader failure at 150 s
   - **Stress**: four leader failures at 60 s intervals
-- **`run_failure_experiments.sh`** — shell driver for the full experiment suite
-- **`run_comprehensive_tests.sh`** — tests all timeout strategies across all scenarios
-- **`analyze_timeouts.py`** — statistical analysis and plot generation
+- **`run_failure_experiments.sh`** -- shell driver for the full experiment suite
+- **`run_comprehensive_tests.sh`** -- tests all timeout strategies across all scenarios
+- **`analyze_timeouts.py`** -- statistical analysis and plot generation
 
 ### Running Failure Experiments
 
@@ -184,7 +184,7 @@ Expected output:
 │   ├── proposer.rs          # Block proposal and broadcast
 │   └── synchronizer.rs      # Block sync for view changes
 ├── network/src/
-│   ├── simple_sender.rs     # Best-effort sender with jitter simulation
+│   ├── simple_sender.rs          # Best-effort sender with jitter simulation
 │   ├── simple_sender_local.rs    # Local (0ms) latency profile
 │   ├── simple_sender_regional.rs # Regional (~50ms) latency profile
 │   └── simple_sender_global.rs   # Global (~200ms) latency profile
@@ -205,9 +205,9 @@ Expected output:
 
 ## Background
 
-This work builds on the [2-chain HotStuff implementation](https://github.com/asonnino/hotstuff) by Alberto Sonnino. The base protocol is unchanged; this repository contributes only the adaptive timeout mechanism, the comparative timer implementations, and the failure injection experimental infrastructure.
+This work builds on [Sonnino's HotStuff implementation](https://github.com/asonnino/hotstuff). The base protocol is unchanged; this repository contributes only the adaptive timeout mechanism, the comparative timer implementations, and the failure injection experimental infrastructure.
 
-The timeout problem in BFT consensus is a documented open issue — see [Flow issue #3022](https://github.com/onflow/flow-go/issues/3022) for a real-world example of cascade timeout failures in a production BFT system.
+The timeout problem in BFT consensus is a documented open issue. See [Flow issue #3022](https://github.com/onflow/flow-go/issues/3022) for a real-world example of cascade timeout failures in a production BFT system.
 
 ---
 
