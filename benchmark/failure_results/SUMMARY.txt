@@ -1,0 +1,19 @@
+FAILURE INJECTION EXPERIMENT RESULTS
+================================================================================
+
+Baseline:
+  Fixed TPS:    2843 ± 736
+  Adaptive TPS: 2793 ± 795
+  p-value: 0.8389 (no significant difference)
+
+Realistic (1 failure):
+  Fixed detection:    6190ms
+  Adaptive detection: 2198ms
+  Improvement: 64.5% faster
+  p-value: 0.000000
+
+Stress (2 failures):
+  Fixed detection:    5240ms
+  Adaptive detection: 2297ms
+  Improvement: 56.2% faster
+  p-value: 0.000000

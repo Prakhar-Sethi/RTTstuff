@@ -1,0 +1,7 @@
+Timeout,Network,Delay(ms),TPS,Latency(ms)
+fixed,local,50,959,101
+adaptive,local,50,959,84
+fixed,regional,200,954,301
+adaptive,regional,200,951,304
+fixed,global,500,622,1,244
+adaptive,global,500,945,730
