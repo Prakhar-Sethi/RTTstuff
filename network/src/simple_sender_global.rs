@@ -52,7 +52,7 @@ impl SimpleSender {
     /// Try (best-effort) to send a message to a specific address.
     /// This is useful to answer sync requests.
     pub async fn send(&mut self, address: SocketAddr, data: Bytes) {
-        let delay_ms = self.rng.gen_range(0, 200);
+        let delay_ms = self.rng.gen_range(0, 500);
         sleep(Duration::from_millis(delay_ms)).await;
         // Try to re-use an existing connection if possible.
         if let Some(tx) = self.connections.get(&address) {
